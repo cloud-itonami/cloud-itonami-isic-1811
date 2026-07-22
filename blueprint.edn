@@ -8,4 +8,66 @@
  :itonami.blueprint/robotics true
  :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :cae]
  :itonami.blueprint/optional-technologies []
- :itonami.blueprint/status :implemented}
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/maturity :implemented
+ :itonami.blueprint/implemented-slice
+ "PrintingOpsAdvisor ⊣ Printing Governor, langgraph-clj StateGraph
+ (langgraph.graph, printing.operation/build), append-only audit ledger
+ (printing.store/ledger + append-ledger!, MemStore and a DatomicStore
+ backed by langchain.db via langchain-store.core). Fixes two prior gaps
+ from an earlier attempt at this repo: (1) deferred-stub -- `deps.edn`
+ pinned a stale `io.github.com-junkawasaki/langgraph-clj` git/sha
+ coordinate to the pre-rename repo, there was no `printing.operation` or
+ `printing.phase` namespace at all, and `printing.sim` was a one-line
+ `(println ...)` stub that never called the advisor/governor/store, so
+ nothing exercised a real StateGraph; (2) fabrication -- `printing.facts`
+ held a per-jurisdiction (JPN/USA/GBR) regulatory catalog inventing
+ specific statute sections/formal titles (e.g. '労働基準法 §36', 'OSHA
+ 1910 Subpart Z', 'Product Liability Law §3', '42 USC §7661', 'HSWA
+ 1974', 'BS ISO 12647-2:2013') nowhere grounded in this repo's own
+ README/docs, and `printing.governor`'s equipment-control keyword-block
+ list included the literal word 'press', which would hard-block almost
+ any printing-domain proposal. Both are removed; `printing.facts` is now
+ purely structural (supply-category cost thresholds, press-type
+ vocabulary, press/finishing-operation vocabulary, quality-grade
+ vocabulary) with zero new regulatory claims beyond this repo's existing
+ README/docs prose. Now: a genuinely compiled StateGraph
+ (`:intake -> :advise -> :govern -> :decide -+-> :commit / :request-
+ approval -> :commit / :hold`) with `interrupt-before
+ #{:request-approval}` + in-memory checkpointer for real human-in-the-
+ loop resume. A back-office PRINTING OPERATIONS COORDINATION actor for
+ press-line management -- not direct press-equipment operation authority
+ and not color-certification- or quality-inspection-disposition-
+ finalization authority. Six ops (`:log-production-record` /
+ `:log-quality-inspection-record` / `:schedule-press-operation` /
+ `:flag-quality-concern` / `:order-supplies` / `:release-print-run`), all
+ `:effect :propose` only. Eight HARD invariants (press-line-not-
+ registered, no-execution, equipment-or-certification-blocked, op-not-
+ allowed, production-record-invalid, quality-grade-invalid, print-spec-
+ scope-violation, release-without-quality-inspection) plus independent
+ cost/quantity/quality-grade/print-spec/confidence verification
+ (`printing.registry`) elaborate this blueprint's Governor.
+ Quality-concern flagging and print-run release for delivery BOTH ALWAYS
+ escalate to a human printer/quality-manager via the compiled graph's
+ `:request-approval` node (`interrupt-before`, checkpoint-based resume) --
+ matching this repo's own README ('the governor never releases a print
+ run for delivery itself'). A print run's `:release-print-run` hard
+ checks re-derive its quality-inspection status from `printing.store`'s
+ own quality-inspection index (written by a genuinely-committed
+ `:log-quality-inspection-record`, never from a release proposal's
+ self-report) and its color/print-specification scope from the target
+ press line's own `:verified-print-specs` (never from the proposal's own
+ claim) -- proven end to end by
+ `test/printing/operation_test.cljc`'s `quality-inspection-gates-release`
+ exercising commit / hard-hold (unregistered press line, release-
+ without-inspection) / escalate-approve / escalate-reject / phase-0-
+ forces-escalation through the REAL compiled graph, plus a
+ `clojure -M:dev:run` demo runner producing real ledger entries for
+ every scenario. MemStore and DatomicStore pass the same store-contract
+ test (`test/printing/store_contract_test.cljc`), including the
+ quality-inspection index's own upsert semantics. clj-kondo 0 errors,
+ demo runnable end-to-end against both Store backends
+ (`clojure -M:dev:run`). Governance-doc set and `docs/` were already
+ present; CI (`.github/workflows/ci.yml`, sibling-checkout pattern for
+ :local/root deps) and `.gitignore` were missing and are added in this
+ fix."}
