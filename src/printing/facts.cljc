@@ -1,102 +1,95 @@
 (ns printing.facts
-  "Per-jurisdiction printing plant safety and quality requirements.
-  Every jurisdiction in this catalog is backed by an official spec-basis.
-  NEVER invent requirements without an official citation.
+  "Reference facts for printing-plant operations coordination: supply
+  category cost policy, press-type classification, press/finishing
+  operation vocabulary, and a closed print-run quality-disposition
+  vocabulary. This namespace contains pure lookup functions for domain
+  reference data -- the Governor and Advisor consult these instead of
+  inventing thresholds. Mirrors `tobaccoops.facts` (cloud-itonami-isic-0115)
+  in shape, adapted to commercial press production: color-managed offset,
+  digital and flexographic print runs with finishing and binding (README's
+  scope note), rather than a leaf crop.
 
-  This is deliberately a starting catalog (honest coverage reporting) to
-  prove the governor contract end-to-end, not a claim of global coverage.
-  Adding a jurisdiction is additive: one map entry citing a real official
-  source -- never fabricate a jurisdiction's requirements to make coverage
-  look bigger.")
+  FIX (fabrication removed): a prior attempt at this repo used this
+  namespace for a `catalog` of per-jurisdiction regulatory citations
+  (JPN/USA/GBR) inventing specific statute sections that are NOT present
+  anywhere in this repo's own README/docs (e.g. '労働基準法 §36', 'OSHA
+  1910 Subpart Z', 'Product Liability Law §3', '42 USC §7661', 'HSWA
+  1974', 'BS ISO 12647-2:2013' formal titles/subsections). That is a
+  zero-fabrication violation: this actor is an INTERNAL OPERATIONS
+  coordinator, not a jurisdiction-facts actor, and README/docs/business-
+  model.md only ever mention ISO 12647 / G7 Master Certification / OSHA
+  machine-guarding / EPA+EU industrial-emissions frameworks / FSC
+  chain-of-custody as a single descriptive sentence, with no
+  section-level citations to verify. This namespace is now purely
+  structural/internal (cost thresholds, press-type vocabulary, operation
+  vocabulary, quality vocabulary) per the domain-fact caution: keep the
+  governor's hard-checks structural, do not add new unverified
+  regulatory/standards claims.")
 
-;; ----------------------------- jurisdiction catalog -----------------------------
+(def supply-categories
+  "Procurement categories this actor may propose orders for, and the
+  default cost threshold above which an order proposal must escalate for
+  human sign-off (press operator/ops-manager). Printing plates are this
+  domain's distinctive high-cost supply category (offset plate-imaging
+  runs cost materially more per order than routine ink/substrate
+  restocking), priced above routine ink/substrate inputs -- mirrors
+  tobacco-growing's curing-fuel threshold in shape."
+  {"ink"
+   {:id "ink" :name "インキ" :cost-threshold 500}
 
-(def catalog
-  "Per-jurisdiction printing plant safety and quality requirements with official spec-basis citations."
-  {
-   :JPN
-   {:name "Japan"
-    :requirements
-    {:worker-safety {:description "Occupational health and safety program for printing plant workers"
-                     :required true
-                     :spec-basis "Occupational Safety and Health Act (労働安全衛生法) §20"
-                     :evidence [:safety-plan :worker-training-records :hazard-assessment]}
-     :quality-assurance {:description "Print quality and color accuracy verification procedures"
-                         :required true
-                         :spec-basis "Product Liability Law (製造物責任法) §3"
-                         :evidence [:quality-inspection-procedure :color-profile-verification :customer-spec]}
-     :equipment-maintenance {:description "Regular maintenance and calibration of printing equipment"
-                            :required true
-                            :spec-basis "Occupational Safety and Health Act (労働安全衛生法) §30"
-                            :evidence [:maintenance-schedule :equipment-inspection-log :calibration-cert]}
-     :chemical-handling {:description "Ink, solvent, and chemical hazard management"
-                        :required true
-                        :spec-basis "Industrial Safety and Health Act §21"
-                        :evidence [:msds-sheets :chemical-storage-cert :disposal-plan]}}}
+   "substrate"
+   {:id "substrate" :name "用紙・基材" :cost-threshold 500}
 
-   :USA
-   {:name "United States"
-    :requirements
-    {:worker-safety {:description "OSHA-compliant occupational safety program"
-                     :required true
-                     :spec-basis "OSHA 1910 Subpart Z (Hazardous Substances)"
-                     :evidence [:safety-plan :incident-log :training-records]}
-     :quality-assurance {:description "Print quality standards and color management"
-                        :required true
-                        :spec-basis "ISO 12647-2 (Graphic technology — Process control)"
-                        :evidence [:quality-control-procedure :color-accuracy-log]}
-     :environmental-compliance {:description "EPA compliance for printing press emissions and waste"
-                               :required true
-                               :spec-basis "Clean Air Act (42 USC §7661) and Resource Conservation and Recovery Act (RCRA)"
-                               :evidence [:emissions-baseline :waste-disposal-plan :environmental-permit]}
-     :chemical-safety {:description "HAZCOM compliance for ink and solvent storage"
-                      :required true
-                      :spec-basis "OSHA 1910.1200 (Hazard Communication)"
-                      :evidence [:msds-library :chemical-inventory :labeling-cert]}}}
+   "plates"
+   {:id "plates" :name "刷版" :cost-threshold 1500}})
 
-   :GBR
-   {:name "United Kingdom"
-    :requirements
-    {:worker-safety {:description "Health and Safety at Work Act compliance"
-                     :required true
-                     :spec-basis "Health and Safety at Work etc. Act 1974 (HSWA)"
-                     :evidence [:risk-assessment :safety-instruction :incident-reporting]}
-     :quality-assurance {:description "Print quality and color accuracy requirements"
-                        :required true
-                        :spec-basis "British Standard BS ISO 12647-2:2013"
-                        :evidence [:quality-procedure :color-management-system]}
-     :environmental-compliance {:description "Environmental Permitting for emissions and waste"
-                               :required true
-                               :spec-basis "Environmental Permitting (England and Wales) Regulations 2016"
-                               :evidence [:environmental-permit :waste-management-plan]}}}})
+(defn supply-category-by-id [id]
+  (get supply-categories id))
 
-;; ----------------------------- coverage reporting (honest) -----------------------------
+(def default-cost-threshold
+  "Fallback escalation threshold used when a supply-order proposal doesn't
+  cite a known category (never invent a lower bar than this)."
+  500)
 
-(defn coverage
-  "Report what fraction of worldwide jurisdictions have official spec-basis
-  in this catalog. Honest about out-of-scope coverage."
-  []
-  (let [catalog-count (count catalog)
-        world-jurisdictions 194]
-    {:implemented catalog-count
-     :worldwide-jurisdictions world-jurisdictions
-     :coverage-pct (* 100.0 (/ catalog-count world-jurisdictions))
-     :note "Starting catalog to prove governor contract end-to-end, not global coverage claim"}))
+(def press-types
+  "Press types this actor's production records may cover (ISIC 1811:
+  commercial press production -- color-managed offset, digital and
+  flexographic print runs, with finishing and binding, per this repo's
+  own README scope note). Other printing-adjacent activity (independent
+  pre-press/post-press service work) is out of scope -- see
+  cloud-itonami-isic-1812."
+  {"offset"       {:id "offset" :name "オフセット印刷"}
+   "digital"      {:id "digital" :name "デジタル印刷"}
+   "flexographic" {:id "flexographic" :name "フレキソ印刷"}})
 
-;; ----------------------------- helpers -----------------------------
+(defn press-type-by-id [id]
+  (get press-types id))
 
-(defn requirement-citations
-  "Get all official citations for a jurisdiction's requirements."
-  [jurisdiction]
-  (get-in catalog [jurisdiction :requirements]))
+(def press-operation-types
+  "Reference set of press/finishing-operation types this actor's
+  schedule-press-operation proposals commonly cover: robotics-assisted
+  press-feed, in-line quality-inspection, finishing/binding, and
+  press-setup/color-calibration (this repo's README capability layer
+  cites `kotoba-lang/cae` for 'press-setup/color-calibration simulation
+  evidence'). Informational only -- NOT a validated enum; the
+  advisor/operator may propose other operation-type strings and the
+  Governor does not reject unlisted values here."
+  #{"press-feed" "quality-inspection" "finishing" "binding" "color-calibration"})
 
-(defn required-evidence-satisfied?
-  "Check if a checklist satisfies this jurisdiction's evidence requirements."
-  [jurisdiction checklist]
-  (let [reqs (get-in catalog [jurisdiction :requirements])]
-    (every? (fn [[_req-key req-spec]]
-              (if (:required req-spec)
-                (let [evidence-keys (set (:evidence req-spec))]
-                  (every? #(contains? checklist %) evidence-keys))
-                true))
-            reqs)))
+(def quality-grades
+  "Closed set of recognized print-run quality-disposition codes a
+  production or quality-inspection record's :quality-grade may cite --
+  independently verified by the Governor. Generic closed vocabulary this
+  actor's records use to record a graded outcome, not a physical
+  colorimetric measurement or a substitute for a color-management
+  standard."
+  #{"pass" "conditional-pass" "fail" "rework-required" "ungraded"})
+
+(def passing-quality-grades
+  "The subset of `quality-grades` that counts as a completed, passing
+  quality-inspection outcome -- consulted by the Governor's
+  release-without-quality-inspection hard check (README: 'the governor
+  never releases a print run for delivery itself; ... a delivery release
+  without a completed quality-inspection pass ... require[s] human
+  sign-off')."
+  #{"pass" "conditional-pass"})
