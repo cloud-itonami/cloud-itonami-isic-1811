@@ -50,7 +50,7 @@
    "        <tr><td><code>:log-quality-inspection-record</code></td><td><span class=\"warn\">spec-index re-derivation; escalate for sign-off</span></td></tr>"])
 (defn render [db]
   (let [ledger (vec (store/ledger db))
-        p001 (store/press-line db "press-001")
+        p001 (store/registered-press-line db "press-001")
         lrows (str/join "\n" (map ledger-row ledger))]
     (str "<html><head><meta charset=\"utf-8\"><title>cloud-itonami-isic-1811</title>"
      "<style>body{font:14px/1.5 sans-serif;margin:0;color:#1a1a1a;background:#f5f5f5}"
