@@ -50,19 +50,24 @@
             [printing.advisor :as advisor]
             [printing.governor :as governor]
             [printing.phase :as phase]
+            [printing.prepress :as prepress]
             [printing.store :as store]))
+
+(defn- subject-of [request]
+  (prepress/subject-of request))
 
 (defn- commit-fact
   "The audit fact written when a proposal commits. `:record` carries the
   operational payload the advisor proposed (production/quality-inspection
-  record, schedule, concern, supply order, release) -- printing has no
-  separate stateful commit-record! entity beyond press-line registration,
-  so the ledger fact itself is the durable record of what happened."
+  record, schedule, concern, supply order, release, prepress summary) —
+  printing has no separate stateful entity beyond press-line registration
+  and prepress summaries, so the ledger fact is always written; prepress
+  also updates the store's prepress index (summary only)."
   [request context proposal]
   {:t          :committed
    :op         (:op request)
    :actor      (:actor-id context)
-   :subject    (:press-line-id request)
+   :subject    (subject-of request)
    :disposition :commit
    :basis      (:cites proposal)
    :summary    (:summary proposal)
@@ -70,7 +75,7 @@
 
 (defn- commit-record [request _context proposal]
   {:effect  (:effect proposal)
-   :path    [(:press-line-id request)]
+   :path    [(subject-of request)]
    :value   (or (:value proposal) {})
    :payload (:value proposal)})
 
@@ -85,6 +90,31 @@
   (when (= :log-quality-inspection-record (:op request))
     (store/record-quality-inspection! store (:press-line-id request)
                                        (:run-id proposal) (:quality-grade proposal))))
+
+(defn- record-prepress-if-applicable!
+  "When a prepress craft op reaches :commit, store the seihan plan
+  *summary* only (input-hash + plate labels). Never invent plate geometry
+  here — governor already HARD-holds blocking findings and geometry
+  smuggling. Approval identity is written only via human-in-the-loop
+  resume (puts :approved-by on payload)."
+  [store request proposal record]
+  (let [id (subject-of request)
+        payload (or (:payload record) (:value proposal) {})]
+    (case (:op request)
+      :prepress/plan
+      (when-let [pp (:prepress payload)]
+        (store/put-prepress! store id
+                             (merge pp {:id id :status :planned})))
+
+      :prepress/approve-plates
+      (store/put-prepress! store id
+                           (merge (or (store/prepress-record store id) {})
+                                  {:id id
+                                   :status :plates-approved
+                                   :approval (dissoc payload :approved-by)
+                                   :approved-by (:approved-by payload)}))
+
+      nil)))
 
 (defn build
   "Compiles an OperationActor graph bound to `store`. opts:
@@ -130,7 +160,7 @@
               :escalate
               {:disposition :escalate
                :audit [{:t :approval-requested
-                        :op (:op request) :subject (:press-line-id request)
+                        :op (:op request) :subject (subject-of request)
                         :reason (or reason
                                     (cond (:high-stakes? verdict) :always-escalate
                                           :else :low-confidence))
@@ -149,7 +179,7 @@
                             :payload (assoc (:value proposal)
                                             :approved-by (:by approval)))
              :audit [{:t :approval-granted :op (:op request)
-                      :subject (:press-line-id request) :by (:by approval)}]}
+                      :subject (subject-of request) :by (:by approval)}]}
             {:disposition :hold
              :audit [(merge (governor/hold-fact request context
                                                 (assoc verdict :violations
@@ -157,10 +187,11 @@
                             {:t :approval-rejected})]})))
 
       (g/add-node :commit
-        (fn [{:keys [request context proposal]}]
+        (fn [{:keys [request context proposal record]}]
           (let [f (commit-fact request context proposal)]
             (store/append-ledger! store f)
             (record-quality-inspection-if-applicable! store request proposal)
+            (record-prepress-if-applicable! store request proposal record)
             {:audit [f]})))
 
       (g/add-node :hold

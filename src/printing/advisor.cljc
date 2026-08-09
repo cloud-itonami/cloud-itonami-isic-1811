@@ -28,7 +28,13 @@
 
   Current implementation is a mock advisor for testing. Production should
   use langchain/Claude or similar LLM backend (same seam point as
-  `tobaccoops.advisor`).")
+  `tobaccoops.advisor`).
+
+  Prepress craft (paper seihan, not garment shirohan):
+    :prepress/plan            — call seihan.core/plan; propose summary only
+    :prepress/approve-plates  — human plate approval (always escalate)"
+  (:require [printing.prepress :as prepress]
+            [printing.store :as store]))
 
 ;; Protocol for swappable advisor implementations
 (defprotocol Advisor
@@ -38,10 +44,68 @@
     keys the Governor independently verifies, e.g.
     :quantity/:quality-grade/:print-spec-id/:run-id/:cost)."))
 
+(defn- prepress-plan
+  "Call seihan once; propose a *summary-only* record (input hash + plate
+  labels + finding counts). Never put invented plate geometry on the
+  proposal value.
+
+  Confidence drops when the job map is missing or the engine reports
+  blocking findings — governor HARD-holds those; confidence stays honest
+  for humans reading the audit trail."
+  [_db request]
+  (let [subject (prepress/subject-of request)
+        value (or (:value request) request)
+        result (prepress/run-plan value)
+        err (:error result)
+        summary (:summary result)]
+    (cond
+      (= err :job-missing)
+      {:op         :prepress/plan
+       :effect     :propose
+       :summary    (str "prepress/plan " subject " — job map が無い")
+       :cites      []
+       :value      {:prepress nil :error :job-missing}
+       :confidence 0.1}
+
+      (prepress/blocking-findings? summary)
+      {:op         :prepress/plan
+       :effect     :propose
+       :summary    (str "prepress/plan " subject " — blocking 所見 "
+                        (:blocking summary) " 件（入力 " (:input-hash summary) "）")
+       :cites      [:prepress/input-hash :prepress/blocking]
+       :value      {:prepress summary}
+       :confidence 0.2}
+
+      :else
+      {:op         :prepress/plan
+       :effect     :propose
+       :summary    (str "prepress/plan " subject " — 版 "
+                        (:plate-count summary) " 枚 / hash "
+                        (when-let [h (:input-hash summary)]
+                          (subs h 0 (min 12 (count h)))))
+       :cites      [:prepress/input-hash :prepress/plate-labels]
+       :value      {:prepress summary}
+       :confidence 0.95})))
+
+(defn- prepress-approve-plates
+  "Human plate approval — always high-stakes. Actor never self-approves."
+  [db request]
+  (let [subject (prepress/subject-of request)
+        value (or (:value request) {})
+        rec (store/prepress-record db subject)
+        printable? (prepress/printable? rec)]
+    {:op         :prepress/approve-plates
+     :effect     :propose
+     :summary    (str "prepress/approve-plates " subject " — 人による版承認を求める")
+     :cites      (if rec [:prepress/input-hash] [])
+     ;; never pre-fill approver — human-in-the-loop resume writes it
+     :value      (dissoc (or value {}) :approved-by)
+     :confidence (if printable? 0.9 0.3)}))
+
 ;; Mock advisor for testing
 (defrecord MockAdvisor []
   Advisor
-  (-advise [_advisor _store request]
+  (-advise [_advisor store request]
     (let [{:keys [op press-line-id]} request]
       (case op
         :log-production-record
@@ -118,6 +182,12 @@
          :summary "Print-run release for delivery proposed, pending governor/human sign-off"
          :confidence 0.9}
 
+        :prepress/plan
+        (prepress-plan store request)
+
+        :prepress/approve-plates
+        (prepress-approve-plates store request)
+
         ;; fallback -- unrecognized op. The Governor's closed allowlist
         ;; independently rejects this regardless of what the advisor says.
         {:op op
@@ -137,5 +207,6 @@
   {:t :advisor-proposal
    :op (:op request)
    :press-line-id (:press-line-id request)
+   :subject (prepress/subject-of request)
    :proposal-summary (:summary proposal)
    :confidence (:confidence proposal)})

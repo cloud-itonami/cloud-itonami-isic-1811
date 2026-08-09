@@ -20,7 +20,15 @@
  :deps {io.github.kotoba-lang/langgraph
         {:local/root "../../kotoba-lang/langgraph"}
         io.github.kotoba-lang/langchain-store
-        {:local/root "../../kotoba-lang/langchain-store"}}
+        {:local/root "../../kotoba-lang/langchain-store"}
+        ;; Paper prepress craft engine (せいはん / CMYK+spot/bleed/trap).
+        ;; Pure .cljc. NOT garment white-underbase (that is shirohan).
+        ;; Monorepo: sibling under orgs/cloud-itonami/. Standalone fork:
+        ;;   io.github.cloud-itonami/seihan
+        ;;   {:git/url "https://github.com/cloud-itonami/seihan"
+        ;;    :git/sha "b022bd26c398e148187bd0ba8f9944b65afa081f"}
+        io.github.cloud-itonami/seihan
+        {:local/root "../seihan"}}
  :aliases
  {;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
