@@ -17,15 +17,23 @@
                             :verified-print-specs #{"spec-catalog-2026a"}}}})
         actor (op/build db)]
     (exec! actor "t1" {:op :log-production-record :press-line-id "press-001"
-                       :patch {:run-id "run-001" :volume 5000 :grade "A"}})
+                       :quantity 5000 :quality-grade "pass"
+                       :print-spec-id "spec-catalog-2026a" :run-id "run-001"})
     (exec! actor "t2" {:op :flag-quality-concern :press-line-id "press-001"
-                       :patch {:concern "color-drift-on-cyan" :severity :moderate}})
+                       :concern "color-drift-on-cyan"})
     (approve! actor "t2")
     (exec! actor "t3" {:op :order-supplies :press-line-id "press-001"
-                       :patch {:category "ink" :cost 1200}})
+                       :category "ink" :cost 1200})
     (reject! actor "t3")
     (exec! actor "t4" {:op :log-production-record :press-line-id "press-999"
-                       :patch {:run-id "run-002" :volume 100}})
+                       :quantity 100 :quality-grade "pass"})
+    ;; Prepress craft (seihan): clean plan commits; blocking job HARD-holds
+    (exec! actor "t5" {:op :prepress/plan :subject "job-clean"
+                       :value {:pages 16 :colors #{:c :m :y :k}
+                               :paper-mm [210 297] :bleed-mm 3 :trap-mm 0.1}})
+    (exec! actor "t6" {:op :prepress/plan :subject "job-dirty"
+                       :value {:pages 0 :colors #{:c :m :y :k}
+                               :paper-mm [210 297] :bleed-mm 3 :trap-mm 0.1}})
     db))
 
 (defn- esc [v] (-> (str v) (str/replace "&" "&amp;") (str/replace "<" "&lt;") (str/replace ">" "&gt;")))
@@ -47,10 +55,13 @@
   ["        <tr><td><code>:log-production-record</code></td><td><span class=\"ok\">auto-commit when clean + registered</span></td></tr>"
    "        <tr><td><code>:flag-quality-concern</code></td><td><span class=\"warn\">ALWAYS human approval (quality)</span></td></tr>"
    "        <tr><td><code>:order-supplies</code></td><td><span class=\"warn\">human approval over cost threshold; reject path</span></td></tr>"
-   "        <tr><td><code>:log-quality-inspection-record</code></td><td><span class=\"warn\">spec-index re-derivation; escalate for sign-off</span></td></tr>"])
+   "        <tr><td><code>:log-quality-inspection-record</code></td><td><span class=\"warn\">spec-index re-derivation; escalate for sign-off</span></td></tr>"
+   "        <tr><td><code>:prepress/plan</code></td><td><span class=\"ok\">seihan plan summary; HARD hold on blocking findings</span></td></tr>"
+   "        <tr><td><code>:prepress/approve-plates</code></td><td><span class=\"warn\">ALWAYS human approval (plate sign-off)</span></td></tr>"])
 (defn render [db]
   (let [ledger (vec (store/ledger db))
         p001 (store/registered-press-line db "press-001")
+        pp (store/prepress-record db "job-clean")
         lrows (str/join "\n" (map ledger-row ledger))]
     (str "<html><head><meta charset=\"utf-8\"><title>cloud-itonami-isic-1811</title>"
      "<style>body{font:14px/1.5 sans-serif;margin:0;color:#1a1a1a;background:#f5f5f5}"
@@ -67,6 +78,14 @@
      "<table><thead><tr><th>Press line</th><th>Name</th><th>Type</th><th>Status</th></tr></thead><tbody>"
      "<tr><td>press-001</td><td>" (esc (or (:name p001) "-")) "</td><td>" (esc (or (:press-type p001) "-")) "</td><td>" (status-cell ledger "press-001") "</td></tr>"
      "<tr><td>press-999</td><td class=\"muted\">(unregistered)</td><td class=\"muted\">-</td><td>" (status-cell ledger "press-999") "</td></tr>"
+     "</tbody></table></section>"
+     "<section class=\"card\"><h2>Prepress (seihan)</h2>"
+     "<p class=\"muted\">Paper prepress craft — plan summary only (no plate geometry in actor).</p>"
+     "<table><thead><tr><th>Job</th><th>Plates</th><th>Status</th><th>Source</th></tr></thead><tbody>"
+     "<tr><td>job-clean</td><td>" (esc (or (:plate-count pp) "-")) "</td><td>"
+     (if pp "<span class=\"ok\">planned</span>" (status-cell ledger "job-clean"))
+     "</td><td>" (esc (or (some-> pp :source name) "-")) "</td></tr>"
+     "<tr><td>job-dirty</td><td class=\"muted\">-</td><td>" (status-cell ledger "job-dirty") "</td><td class=\"muted\">held</td></tr>"
      "</tbody></table></section>"
      "<section class=\"card\"><h2>Action gate</h2>"
      "<table><thead><tr><th>Op</th><th>Gate</th></tr></thead><tbody>" (str/join "\n" gate-rows) "</tbody></table></section>"

@@ -81,6 +81,7 @@
   proposal. All replaced below with the structural, ground-truth-in-the-
   Store gates this domain's own README specifies."
   (:require [printing.facts :as facts]
+            [printing.prepress :as prepress]
             [printing.registry :as registry]
             [printing.store :as store]))
 
@@ -98,18 +99,29 @@
 
 (def known-ops
   "The closed allowlist of proposal ops this actor may make -- all
-  `:effect :propose` (see ADR domain design)."
+  `:effect :propose` (see ADR domain design).
+
+  Prepress craft (paper seihan):
+    :prepress/plan            — seihan.core/plan summary only
+    :prepress/approve-plates  — human plate approval (always escalate)"
   #{:log-production-record :log-quality-inspection-record
     :schedule-press-operation :flag-quality-concern :order-supplies
-    :release-print-run})
+    :release-print-run
+    :prepress/plan :prepress/approve-plates})
 
 (def always-escalate-ops
   "Ops that ALWAYS require human sign-off even when the Governor finds no
   hard violation and confidence is high. Flagging a quality concern and
   releasing a print run for delivery are never something this actor
   resolves autonomously (README: 'the governor never releases a print
-  run for delivery itself')."
-  #{:flag-quality-concern :release-print-run})
+  run for delivery itself'). Plate approval is human-only — this actor
+  cannot self-approve plates."
+  #{:flag-quality-concern :release-print-run :prepress/approve-plates})
+
+(def prepress-ops
+  "Prepress craft ops are keyed by job `:subject`, not press-line
+  registration. Skip press-line-not-registered for these."
+  #{:prepress/plan :prepress/approve-plates})
 
 (def all-recognized-ops
   "known-ops (allowed to proceed) union blocked-ops (recognized but
@@ -122,11 +134,13 @@
 (defn- press-line-violations
   "A proposal referencing an unregistered (or absent) press-line-id is a
   HARD violation -- never act on behalf of a press line this actor cannot
-  independently verify."
-  [{:keys [press-line-id]} st]
-  (when-not (store/registered-press-line st press-line-id)
-    [{:rule :press-line-not-registered
-      :detail (str "press-line-id " (pr-str press-line-id) " は登録済みの印刷ラインとして確認できない -- ライン登録前の提案は進められない")}]))
+  independently verify. Prepress craft is job-scoped (`:subject`), not
+  press-line-scoped — skip for those ops."
+  [{:keys [op press-line-id]} st]
+  (when-not (contains? prepress-ops op)
+    (when-not (store/registered-press-line st press-line-id)
+      [{:rule :press-line-not-registered
+        :detail (str "press-line-id " (pr-str press-line-id) " は登録済みの印刷ラインとして確認できない -- ライン登録前の提案は進められない")}])))
 
 (defn- execution-violations
   "This actor never executes directly. Any proposal whose `:effect` isn't
@@ -221,6 +235,55 @@
         c (and category (facts/supply-category-by-id category))]
     (or (:cost-threshold c) facts/default-cost-threshold)))
 
+(defn- prepress-plan-violations
+  "HARD: `:prepress/plan` must carry a seihan summary with input hash,
+  and must not advance when the engine reported blocking findings.
+
+  Geometry is not allowed on the proposal either — only the summary
+  keys produced by `printing.prepress/plan-summary`."
+  [{:keys [op]} proposal]
+  (when (= op :prepress/plan)
+    (let [pp (get-in proposal [:value :prepress])
+          err (get-in proposal [:value :error])]
+      (cond
+        (= err :job-missing)
+        [{:rule :prepress-job-missing
+          :detail "prepress/plan に job map が無い（:job または :pages/:colors/:paper-mm）"}]
+
+        (nil? pp)
+        [{:rule :prepress-plan-missing
+          :detail "prepress summary が提案に無い"}]
+
+        (not (string? (:input-hash pp)))
+        [{:rule :prepress-input-hash-missing
+          :detail "input content hash が無い — 版の同一性を後から示せない"}]
+
+        (prepress/blocking-findings? pp)
+        [{:rule :prepress-blocking-findings
+          :detail (str "seihan が blocking 所見 "
+                       (:blocking pp) " 件: "
+                       (pr-str (:blocking-kinds pp))
+                       " — 入力を直してから製版し直す")}]
+
+        ;; Refuse proposals that smuggle invented geometry onto the ledger.
+        ;; seihan summary plates are id/label/kind/order/trap-mm only.
+        (some (fn [plate]
+                (or (contains? plate :contours)
+                    (contains? plate :paths)
+                    (contains? plate :film)
+                    (contains? plate :geometry)))
+              (or (:plates pp) []))
+        [{:rule :prepress-geometry-forbidden
+          :detail "plate geometry を actor が保持してはならない — summary のみ"}]))))
+
+(defn- prepress-approve-self-decided-violations
+  "HARD, PERMANENT: this actor cannot self-approve plates."
+  [{:keys [op]} proposal]
+  (when (= op :prepress/approve-plates)
+    (when (seq (str (get-in proposal [:value :approved-by] "")))
+      [{:rule :prepress-approval-self-decided
+        :detail "版の承認者をこの actor が埋めることはできない（人の専権）"}])))
+
 (defn check
   "Censors a PrintingOpsAdvisor proposal against the Governor rules.
   Returns {:ok? bool :violations [..] :confidence c :escalate? bool
@@ -234,13 +297,16 @@
                            (production-record-invalid-violations proposal)
                            (quality-grade-invalid-violations proposal)
                            (print-spec-scope-violations request proposal st)
-                           (release-without-inspection-violations request proposal st)))
+                           (release-without-inspection-violations request proposal st)
+                           (prepress-plan-violations request proposal)
+                           (prepress-approve-self-decided-violations request proposal)))
         conf (:confidence proposal 0.0)
         low? (registry/confidence-below-floor? conf confidence-floor)
         cost (:cost proposal)
         high-cost? (boolean (and cost (registry/cost-exceeds-threshold?
                                         cost (cost-threshold-for proposal))))
-        always-escalate? (contains? always-escalate-ops (:op proposal))
+        always-escalate? (contains? always-escalate-ops
+                                    (or (:op proposal) (:op request)))
         hard? (boolean (seq hard))]
     {:ok?          (and (not hard?) (not low?) (not high-cost?) (not always-escalate?))
      :violations   hard
@@ -255,7 +321,7 @@
   {:t          :governor-hold
    :op         (:op request)
    :actor      (:actor-id context)
-   :subject    (:press-line-id request)
+   :subject    (prepress/subject-of request)
    :disposition :hold
    :basis      (mapv :rule (:violations verdict))
    :violations (:violations verdict)

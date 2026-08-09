@@ -68,6 +68,11 @@
   (record-quality-inspection! [store press-line-id run-id grade]
     "Record/update the quality-inspection status for a press-line+run.
     Returns grade.")
+  (prepress-record [store id]
+    "One paper-prepress plan summary (input-hash + plate labels; no
+    geometry). Returns nil when unknown.")
+  (put-prepress! [store id record]
+    "Upsert a prepress summary/approval record under `id`. Returns record.")
   (ledger [store]
     "The append-only audit ledger: every committed/held/approval-rejected
     decision fact, in append order.")
@@ -76,7 +81,7 @@
 
 ;; ----------------------------- MemStore (default) -----------------------------
 
-(defrecord MemStore [press-lines inspections ledger-atom]
+(defrecord MemStore [press-lines inspections prepress ledger-atom]
   Store
   (registered-press-line [_store press-line-id]
     (when press-line-id
@@ -89,6 +94,12 @@
   (record-quality-inspection! [_store press-line-id run-id grade]
     (swap! inspections assoc [press-line-id run-id] grade)
     grade)
+  (prepress-record [_store id]
+    (when id (get @prepress id)))
+  (put-prepress! [_store id record]
+    (let [rec (assoc (or record {}) :id id)]
+      (swap! prepress assoc id rec)
+      rec))
   (ledger [_store] @ledger-atom)
   (append-ledger! [_store fact]
     (swap! ledger-atom conj fact)
@@ -98,7 +109,7 @@
   "Create an in-memory store. `initial-press-lines` is an optional map of
   press-line-id -> press-line-record."
   [& [{:keys [initial-press-lines] :or {initial-press-lines {}}}]]
-  (MemStore. (atom initial-press-lines) (atom {}) (atom [])))
+  (MemStore. (atom initial-press-lines) (atom {}) (atom {}) (atom [])))
 
 ;; ----------------------------- DatomicStore (langchain.db) -----------------------------
 
@@ -114,7 +125,7 @@
   seq-keyed event-log read/append are the shared kotoba-lang/
   langchain-store machinery (ADR-2607141600) -- the seam ~190 actors
   hand-roll; this store keeps only its domain wiring."
-  (ls/identity-schema [:press-line/id :inspection/key :ledger/seq]))
+  (ls/identity-schema [:press-line/id :inspection/key :prepress/id :ledger/seq]))
 
 (defn- inspection-key [press-line-id run-id]
   (str press-line-id "|" run-id))
@@ -140,6 +151,17 @@
     (d/transact! conn [{:inspection/key (inspection-key press-line-id run-id)
                         :inspection/status grade}])
     grade)
+  (prepress-record [_store id]
+    (when id
+      (ls/dec* (d/q '[:find ?p .
+                      :in $ ?pid
+                      :where [?e :prepress/id ?pid] [?e :prepress/payload ?p]]
+                    (d/db conn) id))))
+  (put-prepress! [_store id record]
+    (let [rec (assoc (or record {}) :id id)]
+      (d/transact! conn [{:prepress/id id
+                          :prepress/payload (ls/enc rec)}])
+      rec))
   (ledger [_store] (ls/read-stream conn :ledger/seq :ledger/fact))
   (append-ledger! [store fact]
     (ls/append-blob! conn :ledger/seq :ledger/fact (count (ledger store)) fact)
