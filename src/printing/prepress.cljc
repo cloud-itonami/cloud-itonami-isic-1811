@@ -19,7 +19,7 @@
     :prepress/approve-plates  — human plate approval (always escalate)
 
   Sibling pattern: `finishingops.prepress` (shirohan / ISIC 1313)."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [seihan.core :as seihan])
   #?(:clj (:import (java.security MessageDigest)
                    (java.nio.charset StandardCharsets))))
