@@ -44,7 +44,7 @@
   or store, and `printing.governor/evaluate` had no notion of a
   disposition, a commit path, or an audit ledger. `build` now returns a
   genuinely compiled `langgraph.graph/state-graph`, proven end-to-end by
-  `test/printing/operation_test.cljc`."
+  `test/printing/operation_test.cljk`."
   (:require [langgraph.graph :as g]
             [langgraph.checkpoint :as cp]
             [printing.advisor :as advisor]
