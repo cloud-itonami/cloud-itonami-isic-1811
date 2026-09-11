@@ -13,7 +13,7 @@
                         `langchain.db`'s `:db-api` (see langchain.kotoba-db).
 
   Both implement the same protocol and pass the same contract
-  (test/printing/store_contract_test.cljc).
+  (test/printing/store_contract_test.cljk).
 
   FIX (deferred-stub bug + fabrication removed): a prior attempt at this
   repo hand-rolled a plain `{:data (atom {...})}` map with no protocol, no

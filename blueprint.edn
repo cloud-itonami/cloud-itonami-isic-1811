@@ -58,13 +58,13 @@
  self-report) and its color/print-specification scope from the target
  press line's own `:verified-print-specs` (never from the proposal's own
  claim) -- proven end to end by
- `test/printing/operation_test.cljc`'s `quality-inspection-gates-release`
+ `test/printing/operation_test.cljk`'s `quality-inspection-gates-release`
  exercising commit / hard-hold (unregistered press line, release-
  without-inspection) / escalate-approve / escalate-reject / phase-0-
  forces-escalation through the REAL compiled graph, plus a
  `clojure -M:dev:run` demo runner producing real ledger entries for
  every scenario. MemStore and DatomicStore pass the same store-contract
- test (`test/printing/store_contract_test.cljc`), including the
+ test (`test/printing/store_contract_test.cljk`), including the
  quality-inspection index's own upsert semantics. clj-kondo 0 errors,
  demo runnable end-to-end against both Store backends
  (`clojure -M:dev:run`). Governance-doc set and `docs/` were already
