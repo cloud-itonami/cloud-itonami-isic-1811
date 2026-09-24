@@ -18,6 +18,10 @@
  ;; cloud-itonami-isic-0115 (tobaccoops) / cloud-itonami-isic-869
  ;; (transportops).
  :deps {
+        ;; kotoba.robotics.process: the process-physics solvers and probe this
+        ;; repo's physics.edn runs on (physical-AI bot, scripts/physical-ai-bots).
+        io.github.kotoba-lang/robotics {:local/root "../../kotoba-lang/robotics"}
+
         ;; kotoba.lang.text, not clojure.string. Pinned as an explicit floor:
         ;; tools.deps takes the NEWEST sha it is shown, so without a floor here
         ;; this repo silently rides whatever a sibling happens to name.
@@ -35,7 +39,18 @@
         io.github.cloud-itonami/seihan
         {:local/root "../seihan"}}
  :aliases
- {;; offline workspace dev -- pin transitive langchain to local checkout
+ {
+  ;; kbb -M:physics -> the physical-AI bot's measurement: runs physics.edn on
+  ;; kotoba.robotics.process and prints one probe map. Exit 2 = could not measure.
+  :physics {:main-opts ["-m" "kotoba.robotics.process.probe"]}
+  ;; kbb -M:physai-test -> test/'s .cljk on kbb's runner (the bot's test count;
+  ;; a .kotoba vertical's own :test may refuse kbb on purpose).
+  ;; test/ is left out here: printing.prepress requires seihan.core, which is
+  ;; .kotoba (cloud-itonami/seihan src/seihan/core.kotoba) and kbb's runner
+  ;; cannot load it ("Could not find namespace: seihan.core"). The repo's own
+  ;; :test still runs test/ on the JVM gate.
+  :physai-test {:extra-paths ["test-physai"] :main-opts ["-m" "cognitect.test-runner"]}
+;; offline workspace dev -- pin transitive langchain to local checkout
   :dev {:override-deps
         {io.github.kotoba-lang/langchain
          {:local/root "../../kotoba-lang/langchain"}}}
