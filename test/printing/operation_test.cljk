@@ -15,7 +15,7 @@
   print run cannot be released until its own quality-inspection record
   genuinely commits first. Mirrors `tobaccoops.operation-test`
   (cloud-itonami-isic-0115)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [printing.operation :as operation]
             [printing.store :as store]))
