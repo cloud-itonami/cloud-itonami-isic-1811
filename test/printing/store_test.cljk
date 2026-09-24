@@ -1,5 +1,5 @@
 (ns printing.store-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [printing.store :as store]))
 
 (deftest mem-store-creation

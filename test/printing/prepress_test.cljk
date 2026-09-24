@@ -5,7 +5,7 @@
   (b) job that produces blocking findings HARD-holds with rule visible
   (c) mutation: prepress ops must stay on the closed allowlist
   (d) approve-plates always escalates; self-filled approver HARD-holds"
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [langgraph.graph :as g]
             [printing.advisor :as advisor]
             [printing.governor :as governor]
