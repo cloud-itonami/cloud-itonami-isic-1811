@@ -1,0 +1,33 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:dev:physics` runs it.
+;;
+;; README "Robotics premise": robots (press-feed, in-line quality-inspection
+;; cameras, finishing/binding assist) do the physical work under the actor and
+;; the independent Printing Governor. Its physical work here: lifting paper
+;; lifts into the sheet-fed press feeder, and cooling the heat-set web on the
+;; chill rolls after the dryer.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isic-1811"
+ :cases
+ [{:id :paper-lift-to-feeder
+   :kind :manipulator
+   :procedure "press-feed arm lifts a paper lift from the pile board into the sheet-fed press feeder"
+   :params {:l1-m 0.60 :l2-m 0.50 :m1-kg 10.0 :m2-kg 6.0
+            :from [0.70 0.00] :to [0.40 0.60] :duration-s 2.0 :steps 400}
+   :sweep {:param :payload-kg :values [2.5 5.0 7.5 10.0 12.5]}
+   :quantity :peak-tau1-nm
+   :limit {:max 150.0 :basis "estimate: continuous shoulder torque of a mid-size (~15 kg class) handling arm"}
+   :boundary {:lo 0.5 :hi 50.0}}
+  {:id :heatset-chill-roll
+   :kind :thermal
+   :procedure "the printed web leaves the heat-set dryer at 130 C and wraps a water-cooled chill roll (roll on one face, air on the other) until the air-side face falls below 35 C"
+   :params {:conductivity-w-mk 0.10 :density-kg-m3 800.0 :specific-heat-j-kgk 1300.0
+            :t0-c 130.0 :t-hot-c 18.0 :h-front-w-m2k 600.0 :t-back-ambient-c 30.0 :h-back-w-m2k 20.0
+            :threshold-c 35.0 :threshold-direction :falling :duration-s 5.0 :nodes 11}
+   :sweep {:param :thickness-m :values [0.00006 0.00008 0.0001 0.00012 0.00015]}
+   :quantity :time-to-threshold-s
+   :limit {:max 0.6 :basis "estimate: web contact time over the chill-roll stack at press speed"}
+   :boundary {:lo 0.00003 :hi 0.0003}}]}
