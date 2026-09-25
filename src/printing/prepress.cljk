@@ -19,10 +19,9 @@
     :prepress/approve-plates  — human plate approval (always escalate)
 
   Sibling pattern: `finishingops.prepress` (shirohan / ISIC 1313)."
-  (:require [kotoba.lang.text :as str]
+  (:require [kotoba.bytes :as kbytes] [kotoba.lang.text :as str]
             [seihan.core :as seihan])
-  #?(:clj (:import (java.security MessageDigest)
-                   (java.nio.charset StandardCharsets))))
+  #?(:clj (:import (java.security MessageDigest))))
 
 ;; ---------------------------------------------------------------- hash
 
@@ -36,7 +35,7 @@
   (let [s (pr-str job)]
     #?(:clj
        (let [md (MessageDigest/getInstance "SHA-256")
-             bs (.digest md (.getBytes (str s) StandardCharsets/UTF_8))]
+             bs (.digest md (kbytes/utf8-bytes (str s)))]
          (apply str (map #(format "%02x" (bit-and % 0xff)) bs)))
        :cljs
        ;; Browser path not exercised by JVM tests; keep a stable pure fallback
